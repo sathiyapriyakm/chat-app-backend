@@ -1,45 +1,61 @@
 import express from "express";
-import cors from "cors";
+import {  MongoClient } from "mongodb";
+import Cors from "cors";
+import dotenv from "dotenv";
 import { Server } from "socket.io";
 import http from "http";
-import dotenv from "dotenv";
 
-const app = express();
 dotenv.config();
-const corsOptions = {
-    origin: "*",
-    optionsSuccessStatus: 200,
-  };
-app.use(cors(corsOptions));
+const PORT = process.env.PORT || 5000;
+const MONGO_URL=process.env.MONGO_URL;
+const app = express();
+app.use(express.json());
 const server = http.createServer(app);
-const PORT = process.env.PORT || 4000;
+const corsOptions = {
+  origin: "*",
+  optionsSuccessStatus: 200,
+};
+
+const mongoClient = new MongoClient(MONGO_URL);
+  
 export const io = new Server(server, {
     cors: {
-      origin: `${process.env.CLIENT_URL}`,
-      methods: ["GET", "POST"],
+      origin: "*",
+      methods: ["GET", "POST","PUT","DELETE"],
+      "allowHeaders":[],
+      "credentials":true
+
     },
-  });
+  })
+  
+  
+app.use(Cors(corsOptions));
 
+server.listen(PORT,async ()=>{
+  try{
+    await mongoClient.connect();
+    console.log("listerning at *::",PORT)
+  }catch(er){
+    console.error(er);
+  }
+ 
+})
 
-app.listen(PORT, () => console.log("Server started in port number:", PORT));
+io.on('connection', socket => {
+  const id = socket.handshake.query.id
+  socket.join(id)
 
-// const io=require("socket.io")(4000);
-io.on("connection",socket=>{
-    const id=socket.handshake.query.id;
-    socket.join(id);
-    socket.on("send-message",({recipients,text})=>{
-        recipients.forEach(recipient=>{
-            const newRecipients=recipients.filter(r=>r!==recipient)
-            newRecipients.push(id)
-            socket.broadcast.to(recipient).emit("receive-message",{
-                recipients:newRecipients,sender:id,text
-            })
-        })
+  socket.on('send-message', ({ recipients, text }) => {
+    recipients.forEach(recipient => {
+      const newRecipients = recipients.filter(r => r !== recipient)
+      newRecipients.push(id)
+      socket.broadcast.to(recipient).emit('receive-message', {
+        recipients: newRecipients, sender: id, text
+      })
     })
+  })
 })
 
 app.get("/", (req, res) => {
-    //   console.log("default request");
-    res.send("Welcome to the chat Application");
-  });
-  
+  res.send("Welcome to chat Application");
+});
